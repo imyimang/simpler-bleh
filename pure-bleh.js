@@ -244,8 +244,9 @@
 
 			const stashed = /^\u0000(\d+)\u0000$/.exec(trimmed);
 			if (stashed) {
-				flushAll();
-				output.push(stash[Number(stashed[1])] || '');
+				flushList();
+				flushQuote();
+				paragraph.push(stash[Number(stashed[1])] || '');
 				return;
 			}
 
