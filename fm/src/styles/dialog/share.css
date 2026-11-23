@@ -1,8 +1,0 @@
-.share-top {
-	display: flex;
-	gap: var(--button-list-gap);
-
-	.share-input {
-		width: 300px !important;
-	}
-}

@@ -1,50 +1,27 @@
-# [bleh for last.fm](https://bleh.katelyn.moe/)
+# pure bleh
 
-bleh is my passion project and a take on a full [Last.fm](https://last.fm) redesign. It is still work-in-progress in some areas, but should be stable and consistent overall. If you're interested in what it has to offer along with more screenshots, head to the site above (which has a convenient download link too :3 !!) Community contributions are welcome, please see below!
+A pure version of [bleh](https://github.com/katelyynn/bleh)
 
-![preview](https://bleh.katelyn.moe/appearance.webp)
+This is my personal script, containing only the features I personally use. Basically, all CSS and most features have been removed.
 
-## Support
+## Features
 
-If you feel my work on this and my other Last.fm projects is worthy of donations, you are welcome to sponsor me on GitHub. This is, of course, optional, and bleh will forever be open-source and free. Sponsors get a sweet profile badge and access to a wider range of profile customisation.
+- Markdown and styled text: bold, italic, underline, strikethrough, code, headings, lists, quotes, alignment, custom fonts.
+- User mentions and timestamps: @username and Discord-style timestamps.
+- Links: Markdown, Last.fm artist/album/track tags, URL tags, plain URLs.
+- Images: Markdown images with proxying and automatic retries.
+- Album artwork upload: Auto-fills the album title.
+- Compatibility percentage: Shows a percentage beside the Tasteometer rating.
+- Artist shouts: Expands the shoutbox for browsing shouts on the page without clicking the button.
 
-## Development
+## Install
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidance on how to build bleh from source and how to contribute.
+Load the raw [`pure-bleh.js`](pure-bleh.js) in Tampermonkey or Violentmonkey.
 
-### Translations
+## Credits
 
-Please see [the wiki entry for more details](https://github.com/katelyynn/bleh/wiki/Translations)
+Based on the original [bleh by katelyn](https://github.com/katelyynn/bleh). Original author attribution is retained in the userscript header.
 
-## Connecting
+## License
 
-bleh accesses multiple community repositories for storing capitalisations and MusicBrainz ids, see the following:
-
-- [lotus](https://github.com/katelyynn/lotus)
-- [oracle](https://github.com/katelyynn/oracle)
-
-If you choose to connect your account with the Last.fm API, bleh makes a request to my server (this is needed due to API secrets):
-
-- [jufufu](https://github.com/katelyynn/jufufu)
-
-bleh is built using a core package I created:
-
-- [florence](https://github.com/katelyynn/florence)
-
----
-
-<div align="center">
-<a href="https://www.star-history.com/?repos=katelyynn%2Fbleh&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=katelyynn/bleh&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=katelyynn/bleh&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=katelyynn/bleh&type=date&legend=top-left" />
- </picture>
-</a>
-</div>
-
----
-
-<div align="center">
-made with <a href="https://katelyn.moe/sponsor">♡</a> by katelyn and contributors
-</div>
+See [LICENSE](LICENSE).
