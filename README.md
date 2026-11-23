@@ -20,7 +20,7 @@ Load the raw [`pure-bleh.js`](pure-bleh.js) in Tampermonkey or Violentmonkey.
 
 ## Credits
 
-Based on the original [bleh by katelyn](https://github.com/katelyynn/bleh). Original author attribution is retained in the userscript header.
+Based on the original [bleh by katelyn](https://github.com/katelyynn/bleh)
 
 ## License
 
