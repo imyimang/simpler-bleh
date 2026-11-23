@@ -146,7 +146,7 @@
 			: '';
 
 		let text = String(source).replace(/\r\n?/g, '\n');
-		const leadingIndent = /^[ \t]*/.exec(text)[0].length;
+		const leadingIndent = /^(?:[ \t]*\n)*([ \t]*)\S/m.exec(text)?.[1].length || 0;
 		if (leadingIndent) {
 			text = text.replace(new RegExp(`^[ \\t]{0,${leadingIndent}}`, 'gm'), '');
 		}
