@@ -1,6 +1,6 @@
 // ==UserScript==
-// @name         pure bleh
-// @namespace    https://github.com/imyimang/pure-bleh
+// @name         simpler bleh
+// @namespace    https://github.com/imyimang/simpler-bleh
 // @version      1.0.0
 // @description  Markdown, styled text and images in shouts and about me, plus album artwork upload title autofill. No appearance changes.
 // @author       imyimang
@@ -20,11 +20,12 @@
 (() => {
 	'use strict';
 
-	const PROCESSED = 'data-bleh-pure';
-	const TITLE_MARKER = 'data-bleh-pure-title';
-	const CSP_MARKER = 'data-bleh-pure-csp';
-	const FETCH_MARKER = 'data-bleh-pure-fetched';
-	const COMPAT_MARKER = 'data-bleh-pure-compat';
+	const PROCESSED = 'data-bleh-simpler';
+	const TITLE_MARKER = 'data-bleh-simpler-title';
+	const CSP_MARKER = 'data-bleh-simpler-csp';
+	const FETCH_MARKER = 'data-bleh-simpler-fetched';
+	const COMPAT_MARKER = 'data-bleh-simpler-compat';
+	const IMAGE_WRAPPER_MARKER = 'data-bleh-simpler-image-wrapper';
 	const PROXY_FREE = [
 		'count.getloli.com',
 		'i.imgur.com',
@@ -42,7 +43,45 @@
 	];
 	const ROOT = `${location.protocol}//${location.host}`;
 	const initializedTitles = new WeakSet();
-	const markdownSignal = /\[(?:url|artist|album|track|font|left|center|right|links)\b[^\]]*\]|\[\/(?:url|artist|album|track|left|center|right|links)\]|!\[[^\]]*\]\([^)]+\)|\[[^\]]+\]\([^)]+\)|https?:\/\/|www\.|@[a-z0-9_]+|`[^`]+`|\*\*[^*]+\*\*|~~[^~]+~~|__[^_]+__|<t:\d|^#{1,6}\s|^>\s|^\s*(?:[-*]\s|\d+\.\s)|\n/im;
+	const SHOUT_MARKDOWN = {
+		allowHeaders: false,
+		allowLists: false,
+		allowAlignment: false,
+		allowFonts: false,
+		allowHue: false,
+		allowBanners: false,
+		allowIcons: false,
+		allowSocials: false,
+		startingHeader: 5,
+	};
+	const ABOUT_MARKDOWN = {
+		allowHeaders: true,
+		allowLists: true,
+		allowAlignment: true,
+		allowFonts: true,
+		allowHue: true,
+		allowBanners: true,
+		allowIcons: true,
+		allowSocials: true,
+		startingHeader: 3,
+	};
+	const SOCIAL_LABELS = {
+		lastfm: 'last.fm',
+		twitter: 'X',
+		x: 'X',
+		mastodon: 'Mastodon',
+		bluesky: 'Bluesky',
+		tumblr: 'Tumblr',
+		instagram: 'Instagram',
+		facebook: 'Facebook',
+		youtube: 'YouTube',
+		spotify: 'Spotify',
+		soundcloud: 'SoundCloud',
+		steam: 'Steam',
+		discord: 'Discord',
+		websites: 'Website',
+	};
+	const markdownSignal = /\[(?:url|artist|album|track|font|left|center|right|links|banner|accent|name|status)\b[^\]]*\]|\[\/(?:url|artist|album|track|left|center|right|links)\]|!\[[^\]]*\]\([^)]+\)|\[[^\]]+\]\([^)]+\)|https?:\/\/|www\.|@[a-z0-9_]+|`[^`]+`|\*\*[^*]+\*\*|~~[^~]+~~|__[^_]+__|_[^_\n]+_|:hazelfae:|🙏\s*BLESS\s*🙏|^#{1,6}\s|^>\s|^\s*(?:[-*+]\s|\d+\.\s)|\n/im;
 
 	function escapeHtml(value) {
 		return value.replace(/&/g, '&amp;')
@@ -86,88 +125,95 @@
 		return `<a href="${escapeAttr(href)}" target="_blank" rel="noopener noreferrer" style="color:#0b84ff;text-decoration:underline">${label}</a>`;
 	}
 
-	function renderMarkdown(source) {
+	function renderMarkdown(source, options = SHOUT_MARKDOWN) {
 		const stash = [];
-		const hold = html => `\u0000${stash.push(html) - 1}\u0000`;
-		const restore = html =>
-			html.replace(/\u0000(\d+)\u0000/g, (_, index) => stash[Number(index)] || '');
+		const blockStash = new Set();
+		const socials = [];
+		const hold = (html, block = false) => {
+			const key = stash.push(html) - 1;
+			if (block) blockStash.add(key);
+			return `\u0000${key}\u0000`;
+		};
+		const restore = html => {
+			let result = html;
+			for (let pass = 0; pass < 8; pass += 1) {
+				result = result.replace(/\u0000(\d+)\u0000/g, (_, index) => stash[Number(index)] || '');
+			}
+			return result;
+		};
+		const renderSocials = () => socials.length
+			? `<div class="social-links-container">${socials.join('')}</div>`
+			: '';
 
 		let text = String(source).replace(/\r\n?/g, '\n');
-
-		const font = /\[font=([^\]]+)\]/i.exec(text)?.[1]
-			?.split(',')[0]
-			.trim() || null;
-
-		text = text.replace(/```([\s\S]*?)```/g, (_, code) =>
-			hold(`<pre><code>${escapeHtml(code.replace(/^\n|\n$/g, ''))}</code></pre>`)
-		);
-		text = text.replace(/`([^`\n]+)`/g, (_, code) =>
-			hold(`<code>${escapeHtml(code)}</code>`)
-		);
-		text = text.replace(/<t:(\d{9,})(?::([FfDdTtR]))?>/g, (_, stamp, flag) => {
-			const date = new Date(Number(stamp) * 1000);
-			const options = flag === 'D'
-				? { dateStyle: 'short' }
-				: flag === 'T'
-				? { timeStyle: 'short' }
-				: { dateStyle: 'medium', timeStyle: 'short' };
-			const label = Number.isNaN(date.getTime())
-				? stamp
-				: date.toLocaleString(undefined, options);
-			return hold(
-				`<time datetime="${date.toISOString?.() || ''}">${escapeHtml(label)}</time>`
-			);
-		});
-
-		text = text.replace(/\[(?:banner|accent|name|status|links)=[^\]]*\]/gi, '');
-		text = text.replace(/\[\/(?:links)\]/gi, '');
-		text = text.replace(/\[font=[^\]]*\]/gi, '');
-		text = escapeHtml(text);
+		const leadingIndent = /^[ \t]*/.exec(text)[0].length;
+		if (leadingIndent) {
+			text = text.replace(new RegExp(`^[ \\t]{0,${leadingIndent}}`, 'gm'), '');
+		}
+		text = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 		text = text.replace(
-			/\[url=([^\]]+)\]([\s\S]*?)\[\/url\]/gi,
+			/\[artist\]([\s\S]*?)\[\/artist\]/gi,
+			(_, name) => link(`${ROOT}/music/${encodeURI(name.trim())}`, name.trim())
+		);
+		text = text.replace(
+			/\[album artist=([^\]\n]+)\]([\s\S]*?)\[\/album\]/gi,
+			(_, artist, album) =>
+				link(
+					`${ROOT}/music/${encodeURI(artist.trim())}/${encodeURI(album.trim())}`,
+					album.trim()
+				)
+		);
+		text = text.replace(
+			/\[track artist=([^\]\n]+)\]([\s\S]*?)\[\/track\]/gi,
+			(_, artist, track) =>
+				link(
+					`${ROOT}/music/${encodeURI(artist.trim())}/_/${encodeURI(track.trim())}`,
+					track.trim()
+				)
+		);
+		text = text.replace(
+			/\[url=([^\]\n]+)\]([\s\S]*?)\[\/url\]/gi,
 			(_, url, label) => link(url, label)
 		);
 		text = text.replace(
 			/\[url\]([\s\S]*?)\[\/url\]/gi,
-			(_, url) => link(url, url)
-		);
-		text = text.replace(
-			/\[artist\]([\s\S]*?)\[\/artist\]/gi,
-			(_, name) => link(`${ROOT}/music/${encodeURI(name)}`, name)
-		);
-		text = text.replace(
-			/\[album artist=([^\]]+)\]([\s\S]*?)\[\/album\]/gi,
-			(_, artist, album) =>
-				link(
-					`${ROOT}/music/${encodeURI(artist)}/${encodeURI(album)}`,
-					album
-				)
-		);
-		text = text.replace(
-			/\[track artist=([^\]]+)\]([\s\S]*?)\[\/track\]/gi,
-			(_, artist, track) =>
-				link(
-					`${ROOT}/music/${encodeURI(artist)}/_/${encodeURI(track)}`,
-					track
-				)
+			(_, url) => link(url, url.trim())
 		);
 
+		if (options.allowSocials) {
+			text = text.replace(
+				/\[links\]\n?([\s\S]*?)\n?\[\/links\]/gi,
+				(_, inner) => {
+					[...inner.matchAll(/\[([^\]\n]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)]
+						.forEach(([, label, url]) => {
+							const href = safeUrl(url);
+							if (!href) return;
+							socials.push(
+								`<a href="${escapeAttr(href)}" target="_blank" rel="noopener noreferrer"><span>${escapeHtml(label)}</span></a>`
+							);
+						});
+					return '';
+				}
+			);
+		}
+
 		text = text.replace(
-			/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g,
+			/!\[([^\]\n]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g,
 			(_, alt, url, title) => {
 				const src = safeUrl(url);
 				if (!src) return '';
-				return `<img src="${escapeAttr(src)}" alt="${escapeAttr(alt)}"${
-					title ? ` title="${escapeAttr(title)}"` : ''
-				} loading="lazy">`;
+				return hold(
+					`<img src="${escapeAttr(src)}" alt="${escapeAttr(alt)}"${
+						title ? ` title="${escapeAttr(title)}"` : ''
+					} loading="lazy">`
+				);
 			}
 		);
 		text = text.replace(
-			/\[([^\]]+)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g,
+			/\[([^\]\n]+)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g,
 			(_, label, url) => link(url, label)
 		);
-
 		text = text.replace(
 			/(^|[\s(])((?:https?:\/\/|www\.)[^\s<>()]+)/gi,
 			(match, before, raw) => {
@@ -179,115 +225,192 @@
 			}
 		);
 
-		text = text.replace(
-			/\[(left|center|right)\]([\s\S]*?)\[\/\1\]/gi,
-			(_, align, inner) =>
-				`<span style="display:block;text-align:${
-					align.toLowerCase()
-				}">${
-					renderMarkdown(inner).html.replace(/<\/?p>/g, '')
-				}</span>`
-		);
+		if (options.allowAlignment) {
+			text = text.replace(
+				/\[(left|center|right)\]\n?([\s\S]*?)\n?\[\/\1\]/gi,
+				(_, align, inner) =>
+					hold(
+						`<div class="text-${align.toLowerCase()}">${
+							renderMarkdown(inner, options).html.replace(/<\/?p>/g, '')
+						}</div>`,
+						true
+					)
+			);
+		}
+
+		if (options.allowBanners) text = text.replace(/\[banner=[^\]\n]*\]/gi, '');
+		if (options.allowHue) text = text.replace(/\[(?:accent|name)=[^\]\n]*\]/gi, '');
+		if (options.allowIcons) {
+			text = text.replace(/\[status=[^\]\n]*\]/gi, '');
+			text = text.replace(
+				/:hazelfae:/gi,
+				'<img src="https://katelyynn.github.io/bleh/assets/hazelfae.png" alt="hazelfae" class="emoji">'
+			);
+			text = text.replace(
+				/🙏\s*BLESS\s*🙏/gi,
+				'<img src="https://katelyynn.github.io/bleh/assets/bless.png" alt="BLESS" class="emoji">'
+			);
+		}
+		if (options.allowFonts) {
+			text = text.replace(/\[font=[^\]\n]*\]/gi, '');
+			text = text.replace(/\[\/font\]/gi, '');
+		}
+		if (options.allowSocials) {
+			text = text.replace(/\[links=([^\]\n]*)\]/gi, (_, value) => {
+				value.split(/[\s,]+/).filter(Boolean).forEach(entry => {
+					const separator = entry.indexOf(':');
+					if (separator < 0) return;
+					const name = entry.slice(0, separator).toLowerCase();
+					const handle = entry.slice(separator + 1);
+					if (!handle) return;
+					const label = SOCIAL_LABELS[name] || name;
+					const href = name === 'lastfm'
+						? `${ROOT}/user/${encodeURI(handle)}`
+						: `https://${name}.com/${encodeURI(handle)}`;
+					socials.push(
+						`<a href="${escapeAttr(href)}" target="_blank" rel="noopener noreferrer"><img src="https://icons.duckduckgo.com/ip3/${name}.ico" alt=""><span>${escapeHtml(label)}</span></a>`
+					);
+				});
+				return '';
+			});
+			text = text.replace(/\[\/links\]/gi, '');
+		}
 
 		text = text.replace(
 			/(^|[\s([{.,])@([a-z0-9_]{1,20})(?!@)(?=$|[^\w])/gi,
 			(_, before, name) =>
-				`${before}<a href="${ROOT}/user/${name}">@${name}</a>`
+				`${before}<a class="mention" href="${ROOT}/user/${name}">@${name}</a>`
 		);
 
-		text = text.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
-		text = text.replace(/__([^_\n]+)__/g, '<u>$1</u>');
-		text = text.replace(/~~([^~\n]+)~~/g, '<del>$1</del>');
-		text = text.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
-		text = text.replace(/(^|[^_])_([^_\n]+)_/g, '$1<em>$2</em>');
+		text = text.replace(/<[^>\n]+>/g, match => hold(match));
+		text = text.replace(
+			/^((?: {4}|\t)[^\n]*(?:\n(?: {4}|\t)[^\n]*)*)/gm,
+			block => {
+				const lines = block.split('\n').map(line => line.replace(/^(?: {4}|\t)/, ''));
+				return `\n${hold(
+					`<pre><code>${escapeHtml(lines.join('\n'))}</code></pre>`,
+					true
+				)}\n`;
+			}
+		);
+		text = text.replace(/`([^`\n]+)`/g, (_, code) =>
+			hold(`<code>${escapeHtml(code)}</code>`)
+		);
 
-		const output = [];
-		let paragraph = [];
-		let list = null;
-		let quote = [];
+		const inlineFormat = value => {
+			let result = value;
+			result = result.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+			result = result.replace(/__([^_\n]+)__/g, '<u>$1</u>');
+			result = result.replace(/~~([^~\n]+)~~/g, '<del>$1</del>');
+			result = result.replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+			result = result.replace(/(^|[^_])_([^_\n]+)_/g, '$1<em>$2</em>');
+			return result;
+		};
+		const blockPlaceholder = html => hold(html, true);
+		const getBlockKey = line => {
+			const match = /^\u0000(\d+)\u0000$/.exec(line.trim());
+			return match && blockStash.has(Number(match[1])) ? match[1] : null;
+		};
 
-		function flushParagraph() {
-			if (!paragraph.length) return;
-			output.push(paragraph.join('<br>'));
-			paragraph = [];
-		}
+		const blocks = [];
+		text.split(/\n{2,}/).forEach(chunk => {
+			const lines = chunk.split('\n').filter(line => line.trim());
+			if (!lines.length) return;
 
-		function flushList() {
-			if (!list) return;
-			output.push(
-				`<${list.type}>${
-					list.items.map(item => `<li>${item}</li>`).join('')
-				}</${list.type}>`
-			);
-			list = null;
-		}
-
-		function flushQuote() {
-			if (!quote.length) return;
-			output.push(`<blockquote>${quote.join('<br>')}</blockquote>`);
-			quote = [];
-		}
-
-		function flushAll() {
-			flushParagraph();
-			flushList();
-			flushQuote();
-		}
-
-		text.split('\n').forEach(line => {
-			const trimmed = line.trim();
-
-			if (!trimmed) {
-				flushAll();
+			if (lines.every(line => getBlockKey(line) !== null)) {
+				blocks.push(lines.map(line => restore(line)).join(''));
 				return;
 			}
 
-			const stashed = /^\u0000(\d+)\u0000$/.exec(trimmed);
-			if (stashed) {
-				flushList();
-				flushQuote();
-				paragraph.push(stash[Number(stashed[1])] || '');
-				return;
-			}
-
-			const heading = /^(#{1,6})\s+(.*)$/.exec(trimmed);
-			if (heading) {
-				flushAll();
-				const level = Math.min(heading[1].length + 2, 6);
-				output.push(`<h${level}>${heading[2]}</h${level}>`);
-				return;
-			}
-
-			const unordered = /^[-*]\s+(.*)$/.exec(trimmed);
-			const ordered = /^\d+\.\s+(.*)$/.exec(trimmed);
-			if (unordered || ordered) {
-				flushParagraph();
-				flushQuote();
-				const type = unordered ? 'ul' : 'ol';
-				if (!list || list.type !== type) {
-					flushList();
-					list = { type, items: [] };
+			const htmlLines = [];
+			let currentList = null;
+			let plainList = '';
+			const flushList = () => {
+				if (plainList) {
+					htmlLines.push(plainList);
+					plainList = '';
 				}
-				list.items.push((unordered || ordered)[1]);
-				return;
-			}
+				if (!currentList) return;
+				htmlLines.push(`${currentList}</${currentList.startsWith('<ul') ? 'ul' : 'ol'}>`);
+				currentList = null;
+			};
 
-			const quoted = /^&gt;\s?(.*)$/.exec(trimmed);
-			if (quoted) {
-				flushParagraph();
+			lines.forEach(line => {
+				const trimmed = line.trim();
+				const blockKey = getBlockKey(line);
+
+				if (blockKey !== null) {
+					flushList();
+					htmlLines.push(line);
+					return;
+				}
+
+				const heading = /^(#{1,6})\s+(.*)$/.exec(trimmed);
+				const unordered = /^[-*+]\s+(.*)$/.exec(trimmed);
+				const ordered = /^\d+\.\s+(.*)$/.exec(trimmed);
+				const quoted = /^&gt;\s+(.*)$/.exec(trimmed);
+
+				if (heading && options.allowHeaders) {
+					flushList();
+					const level = Math.min(
+						Math.max(options.startingHeader + heading[1].length - 1, 1),
+						6
+					);
+					htmlLines.push(`<h${level}>${inlineFormat(heading[2])}</h${level}>`);
+					return;
+				}
+
+				if ((unordered || ordered) && options.allowLists) {
+					const type = unordered ? 'ul' : 'ol';
+					if (!currentList || !currentList.startsWith(`<${type}>`)) {
+						flushList();
+						currentList = `<${type}>`;
+					}
+					currentList += `<li>${inlineFormat((unordered || ordered)[1])}</li>`;
+					return;
+				}
+
+				if (quoted) {
+					flushList();
+					htmlLines.push(`<blockquote>${inlineFormat(quoted[1])}</blockquote>`);
+					return;
+				}
+
+				if (heading && !options.allowHeaders) {
+					flushList();
+					htmlLines.push(
+						heading[1].length === 1
+							? `<p><strong>${inlineFormat(heading[2])}</strong></p>`
+							: `<p>${inlineFormat(heading[2])}</p>`
+					);
+					return;
+				}
+
+				if ((unordered || ordered) && !options.allowLists) {
+					plainList += inlineFormat((unordered || ordered)[1]);
+					return;
+				}
+
 				flushList();
-				quote.push(quoted[1]);
-				return;
-			}
+				htmlLines.push(inlineFormat(trimmed));
+			});
 
 			flushList();
-			flushQuote();
-			paragraph.push(trimmed);
+
+			if (htmlLines.length === 1 && getBlockKey(htmlLines[0]) !== null) {
+				blocks.push(restore(htmlLines[0]));
+			} else {
+				blocks.push(blockPlaceholder(`<p>${htmlLines.join('<br>')}</p>`));
+			}
 		});
 
-		flushAll();
-
-		return { html: restore(output.join('')), font };
+		let html = restore(blocks.join(''));
+		if (socials.length) html += renderSocials();
+		html = html.replace(
+			/<p>(Due to local laws, we are temporarily[\s\S]*?)<\/p>/g,
+			(_, content) => `<p class="local-restriction">${content}</p>`
+		);
+		return { html };
 	}
 
 	function requestImage(image, url) {
@@ -319,23 +442,22 @@
 		});
 	}
 
-	function renderInto(element, className, copyClasses) {
+	function renderInto(element, className, copyClasses, isAbout = false) {
 		if (element.hasAttribute(PROCESSED)) return;
 		element.setAttribute(PROCESSED, '');
 
 		const source = element.textContent;
 		if (!markdownSignal.test(source)) return;
 
-		const { html, font } = renderMarkdown(source);
+		const { html } = renderMarkdown(source, isAbout ? ABOUT_MARKDOWN : SHOUT_MARKDOWN);
 		if (!html) return;
 
 		const container = document.createElement('div');
-		container.className = 'bleh-pure-markdown';
+		container.className = 'bleh-simpler-markdown parsed-markdown markdown-body';
 		if (copyClasses) {
 			element.classList.forEach(name => container.classList.add(name));
 		}
 		if (className) container.classList.add(className);
-		if (font) container.style.fontFamily = font;
 
 		if (element.tagName === 'P' && typeof getComputedStyle === 'function') {
 			const originalStyle = getComputedStyle(element);
@@ -349,16 +471,34 @@
 
 		container.innerHTML = html;
 
+		const restoreImageSize = image => {
+			if (typeof getComputedStyle !== 'function') return;
+			const style = getComputedStyle(image);
+			if (style.width && style.width !== 'auto') image.style.width = style.width;
+			if (style.height && style.height !== 'auto') image.style.height = style.height;
+			if (style.maxWidth && style.maxWidth !== 'none') image.style.maxWidth = style.maxWidth;
+			if (style.maxHeight && style.maxHeight !== 'none') image.style.maxHeight = style.maxHeight;
+		};
+		const wrapImage = image => {
+			if (image.parentElement?.closest(`[${IMAGE_WRAPPER_MARKER}]`)) return;
+			const wrapper = document.createElement('div');
+			wrapper.className = 'markdown-image';
+			wrapper.setAttribute(IMAGE_WRAPPER_MARKER, '');
+			image.replaceWith(wrapper);
+			wrapper.appendChild(image);
+		};
+
+		container.querySelectorAll('a').forEach(anchor => {
+			anchor.classList.add('generic-link');
+			if (!anchor.hasAttribute('target')) anchor.setAttribute('target', '_blank');
+			if (!anchor.hasAttribute('rel')) anchor.setAttribute('rel', 'noopener noreferrer');
+		});
+
 		container.querySelectorAll('img').forEach(image => {
 			const original = image.src;
 			image.setAttribute('data-unsafe-href', encodeURI(original));
-
-			image.style.maxWidth = '100%';
-			image.style.width = 'auto';
-			image.style.height = 'auto';
-			image.style.objectFit = 'contain';
-			image.style.display = 'block';
-
+			restoreImageSize(image);
+			wrapImage(image);
 			const proxied = proxyImage(original);
 			image.src = proxied;
 
@@ -492,7 +632,7 @@
 
 	function compatibilityMarker(percent) {
 		const marker = document.createElement('span');
-		marker.className = 'bleh-pure-compat-percent';
+		marker.className = 'bleh-simpler-compat-percent';
 		marker.setAttribute(COMPAT_MARKER, '');
 		marker.style.color = 'inherit';
 		marker.textContent = `(${percent})`;
@@ -670,9 +810,9 @@
 	}
 
 	function fixSortArrow() {
-		if (document.querySelector('style[data-bleh-pure-sort-arrow]')) return;
+		if (document.querySelector('style[data-bleh-simpler-sort-arrow]')) return;
 		const style = document.createElement('style');
-		style.setAttribute('data-bleh-pure-sort-arrow', '');
+		style.setAttribute('data-bleh-simpler-sort-arrow', '');
 		style.textContent = '#shoutbox-sort::before{left:auto!important;right:12px!important;transform:none!important;margin-left:0!important;margin-right:0!important}';
 		(document.head || document.documentElement).appendChild(style);
 	}
@@ -683,7 +823,7 @@
 		).forEach(element => {
 			const isAbout = element.parentElement?.classList
 				.contains('about-me-sidebar');
-			renderInto(element, isAbout ? 'about-me-content' : '', true);
+			renderInto(element, isAbout ? 'about-me-content' : '', true, isAbout);
 		});
 
 		fillAlbumTitle();

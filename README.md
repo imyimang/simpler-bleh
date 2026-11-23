@@ -1,12 +1,12 @@
-# pure bleh
+# simpler bleh
 
-A pure version of [bleh](https://github.com/katelyynn/bleh)
+A simpler version of [bleh](https://github.com/katelyynn/bleh)
 
 This is my personal script, containing only the features I personally use. Basically, all CSS and most features have been removed.
 
 ## Features
 
-- Markdown and styled text: bold, italic, underline, strikethrough, code, headings, lists, quotes, alignment, custom fonts.
+- Markdown and styled text: bold, italic, underline, strikethrough, code, alignment, custom fonts.
 - User mentions and timestamps: @username and Discord-style timestamps.
 - Links: Markdown, Last.fm artist/album/track tags, URL tags, plain URLs.
 - Images: Markdown images with proxying and automatic retries.
@@ -16,7 +16,7 @@ This is my personal script, containing only the features I personally use. Basic
 
 ## Install
 
-Load the raw [`pure-bleh.js`](pure-bleh.js) in Tampermonkey or Violentmonkey.
+Load the raw [`simpler-bleh.js`](simpler-bleh.js) in Tampermonkey or Violentmonkey.
 
 ## Credits
 
